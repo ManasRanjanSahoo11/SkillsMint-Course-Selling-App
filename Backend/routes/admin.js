@@ -1,12 +1,31 @@
 const { Router } = require('express');
 const bcrypt = require('bcrypt')
 const jwt = require('jsonwebtoken');
-const { adminModel } = require('../db');
+const { adminModel, courseModel } = require('../db');
 const { adminAuth } = require('../middleware/auth');
-const adminRouter = Router() 
+const { z } = require('zod')
+const adminRouter = Router()
 
 adminRouter.post('/signup', async (req, res) => {
-    const { email, password, firstname, lastname } = req.body;
+
+    const adminSignupRequireBody = z.object({
+        email: z.string().min(6).max(100).email(),
+        password: z.string().min(6),
+        firstname: z.string(),
+        lastname: z.string()
+    })
+
+    const parsedBody = adminSignupRequireBody.safeParse(req.body)
+
+    if (!parsedBody.success) {
+        res.status(400).json({
+            success: false,
+            message: "Validation failed"
+        })
+        return
+    }
+
+    const { email, password, firstname, lastname } = parsedBody.data;
 
     const exitingUser = await adminModel.findOne({ email })
     if (exitingUser) {
@@ -34,7 +53,23 @@ adminRouter.post('/signup', async (req, res) => {
 })
 
 adminRouter.post('/signin', async (req, res) => {
-    const { email, password } = req.body
+
+    const adminSignInRequiredBody = z.object({
+        email: z.string().min(6).max(100).email(),
+        password: z.string().min(6),
+    })
+
+    const parsedBody = adminSignInRequiredBody.safeParse(req.body)
+
+    if (!parsedBody.success) {
+        res.status(400).json({
+            success: false,
+            message: "Validation failed"
+        })
+        return
+    }
+
+    const { email, password } = parsedBody.data
 
     const admin = await adminModel.findOne({ email })
 
@@ -49,7 +84,7 @@ adminRouter.post('/signin', async (req, res) => {
 
     if (admin && comparePassword) {
 
-        const token = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: "1h" })
+        const token = jwt.sign({ adminId: admin._id }, process.env.JWT_SECRET, { expiresIn: "1h" })
 
         res.cookie("token", token)
             .status(200)
@@ -62,13 +97,30 @@ adminRouter.post('/signin', async (req, res) => {
 })
 
 adminRouter.post('/create-course', adminAuth, async (req, res) => {
-    const { title, desc, price } = req.body
+
+    const createCourseRequiredBody = z.object({
+        title: z.string(),
+        desc: z.string(),
+        price: z.number(),
+    })
+
+    const parsedBody = createCourseRequiredBody.safeParse(req.body)
+
+    if (!parsedBody.success) {
+        res.status(400).json({
+            success: false,
+            message: "Validation failed"
+        })
+        return
+    }
+
+    const { title, desc, price } = parsedBody.data;
 
     const course = await courseModel.create({
         title,
         desc,
         price,
-        adminId: admin._id
+        adminId: req.adminId
     })
 
     if (course) {
@@ -80,12 +132,55 @@ adminRouter.post('/create-course', adminAuth, async (req, res) => {
     }
 })
 
-adminRouter.put('/update-courses', adminAuth, async (req, res) => {
+adminRouter.put('/update-course:courseId', adminAuth, async (req, res) => {
 
+    const updateCourseRequiredBody = z.object({
+        title: z.string(),
+        desc: z.string(),
+        price: z.string()
+    })
+
+    const parsedBody = updateCourseRequiredBody.safeParse(req.body)
+
+    if (!parsedBody.success) {
+        res.status(400).json({
+            success: false,
+            message: "Validation failed"
+        })
+        return
+    }
+
+    const { courseId } = req.params;
+    const { title, desc, price } = parsedBody.data;
+
+    const updateCourse = await courseModel.findOneAndUpdate({
+        courseId
+    }, {
+        title,
+        desc,
+        price
+    },
+        { new: true })
+
+    await courseModel.save()
+
+    if (!updateCourse) {
+        res.status(401).json({
+            success: false,
+            message: "Course not found"
+        })
+        return
+    }
+
+    res.status(200).json({
+        success: true,
+        message: "Course update successfull",
+        updateCourse
+    })
 })
 
-adminRouter.post('/delete-course', adminAuth, async (req, res) => {
-    const { courseId } = req.body;
+adminRouter.post('/delete-course:courseId', adminAuth, async (req, res) => {
+    const { courseId } = req.params;
     const deleteCourse = await courseModel.findOneAndDelete({ courseId })
     if (!deleteCourse) {
         res.status(401).json({

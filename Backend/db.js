@@ -18,12 +18,12 @@ const courseSchema = mongoose.Schema({
     title: String,
     desc: String,
     price: Number,
-    adminId: { type: String, ref: "admin" }
+    adminId: { type: mongoose.Types.ObjectId, ref: "admin" }
 })
 
 const purchaseSchema = mongoose.Schema({
-    courseId: { type: String, ref: "course" },
-    userId: { type: String, ref: "user" },
+    courseId: { type: mongoose.Types.ObjectId, ref: "course" },
+    userId: { type: mongoose.Types.ObjectId, ref: "user" },
 })
 
 const userModel = mongoose.model("user", userSchema)
